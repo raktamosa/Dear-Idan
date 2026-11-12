@@ -272,26 +272,77 @@
 
   var opening = false;
 
+function setPage(n) {
+  page = n;
+  body.dataset.page = String(n);
+
+  var ds = stage.querySelectorAll('.dots i');
+  for (var i = 0; i < ds.length; i++) ds[i].classList.toggle('on', i + 1 === n);
+
+  // player + note cuma ada di page 1
+  var old = stage.querySelectorAll('.player, .note');
+  for (var j = 0; j < old.length; j++) old[j].remove();
+  if (n === 1) stage.querySelector('.arc').insertAdjacentHTML('afterend', player());
+}
+
+function go(url, push) {
+  return fetch(url)
+    .then(function (r) {
+      if (!r.ok) throw new Error(r.status);
+      return r.text();
+    })
+    .then(function (html) {
+      var doc = new DOMParser().parseFromString(html, 'text/html');
+      var newContent = doc.querySelector('.content');
+      if (!newContent) throw new Error('no content');
+
+      // ganti isi page, audio & scene tidak tersentuh
+      stage.querySelector('.content').replaceWith(document.importNode(newContent, true));
+
+      var oldPop = stage.querySelector('.popup');
+      if (oldPop) oldPop.remove();
+      var newPop = doc.querySelector('.popup');
+      if (newPop) stage.appendChild(document.importNode(newPop, true));
+
+      document.title = doc.title;
+      setPage(Number(doc.body.dataset.page) || 1);
+
+      body.classList.remove('opening');
+      opening = false;
+      stage.classList.remove('leave');
+      window.scrollTo(0, 0);
+      if (push) history.pushState({}, '', url);
+
+      bindPage();
+      sync();
+    })
+    .catch(function () {
+      window.location.href = url; // fallback: pindah page biasa
+    });
+}
+
 document.addEventListener('click', function (e) {
   var a = e.target.closest ? e.target.closest('a.btn') : null;
   if (!a) return;
   e.preventDefault();
+  if (opening || stage.classList.contains('leave')) return;
   save();
+  var href = a.getAttribute('href');
 
   if (a.classList.contains('btn-open')) {
-    if (opening) return;
     opening = true;
     body.classList.add('opening');
-    setTimeout(function () {
-      window.location.href = a.getAttribute('href');
-    }, 1800);
+    setTimeout(function () { go(href, true); }, 1800);
     return;
   }
 
   stage.classList.add('leave');
-  setTimeout(function () {
-    window.location.href = a.getAttribute('href');
-  }, 380);
+  setTimeout(function () { go(href, true); }, 380);
+});
+
+// tombol back/forward browser
+window.addEventListener('popstate', function () {
+  go(location.href, false);
 });
 
   function runIntro() {
@@ -375,10 +426,7 @@ document.addEventListener('click', function (e) {
     ensure();
   }
 
-  var yes = document.querySelector('.btn-yes');
-  var wait = document.querySelector('.btn-wait');
-  var answer = document.querySelector('.answer');
-  var popup = document.querySelector('.popup');
+var yes, wait, answer, popup;
 
   function openPopup() {
     if (!popup) return;
@@ -392,14 +440,32 @@ document.addEventListener('click', function (e) {
     popup.setAttribute('aria-hidden', 'true');
   }
 
+ function bindPage() {
+  yes = document.querySelector('.btn-yes');
+  wait = document.querySelector('.btn-wait');
+  answer = document.querySelector('.answer');
+  popup = document.querySelector('.popup');
+
+  if (yes) {
+    yes.addEventListener('click', function () {
+      setAnswer('Makasih sudah mau memaafkan aku.', 'Aku sayang kamu, Idan.');
+      hearts();
+      setTimeout(openPopup, 1100);
+    });
+  }
+  if (wait) wait.addEventListener('click', showSad);
   if (popup) {
     popup.addEventListener('click', function (e) {
       if (e.target === popup || (e.target.closest && e.target.closest('.popup-close'))) closePopup();
     });
-    document.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape') closePopup();
-    });
   }
+}
+
+document.addEventListener('keydown', function (e) {
+  if (e.key === 'Escape') closePopup();
+});
+
+bindPage();
 
   function setAnswer(small, big) {
   var s = answer.querySelector('.small');
@@ -451,11 +517,4 @@ function showSad() {
       })(el);
     }
   }
-
- yes.addEventListener('click', function () {
-  setAnswer('Makasih sudah mau memaafkan aku.', 'Aku sayang kamu, Idan.');
-  hearts();
-  setTimeout(openPopup, 1100);
-});
-wait.addEventListener('click', showSad);
 })();
